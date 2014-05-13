@@ -1,5 +1,6 @@
 <?php
 if (!defined('__TYPECHO_ROOT_DIR__')) exit;
+
 /**
  * 按评论数量排序输出活跃读者头像墙
  * 
@@ -115,6 +116,7 @@ class Avatars_Plugin implements Typecho_Plugin_Interface
 		if (empty($action)) {
 			$action = $_action;
 		}
+
 		return $form;
 	}
 
@@ -128,11 +130,13 @@ class Avatars_Plugin implements Typecho_Plugin_Interface
 	public static function parse($content,$widget,$lastResult)
 	{
 		$content = empty($lastResult)?$content:$lastResult;
+
 		if ($widget instanceof Widget_Archive) {
 			return preg_replace_callback("/\[AVATARS(\w*[^>]*)\]/i",array('Avatars_Plugin','callback'),$content);
 		} else {
 			return $content;
 		}
+
 	}
 
 	/**
@@ -159,8 +163,8 @@ class Avatars_Plugin implements Typecho_Plugin_Interface
 	 * 读者墙模板输出
 	 * 
 	 * @access public
-     * @param string $listtag 标签名称
-     * @param string $class class名称
+	 * @param string $listtag 标签名称
+	 * @param string $class class名称
 	 * @return void
 	 */
 	public static function output($listtag = 'li',$class = 'mostactive')
@@ -168,19 +172,22 @@ class Avatars_Plugin implements Typecho_Plugin_Interface
 		$options = Helper::options();
 		$settings = $options->plugin('Avatars');
 		$mostactive = '';
+
 		//兼容缓存的默认头像
 		$avdefault = (!empty($settings->avdefault))?$settings->avdefault:'http://gravatar.duoshuo.com/avatar/?s='.$settings->avsize.'&amp;d=';
+
 		//同步系统nofollow设置
 		$nofollow = ($options->commentsUrlNofollow)?'rel="external nofollow"':'';
+
 		//收录时间计算
 		$expire = $options->gmtTime+$options->timezone-$settings->since*24*3600;
 
 		$db = Typecho_Db::get();
-		$select = $db->select(array('COUNT(author)' => 'cnt'),'author','url','mail')->from('table.comments')
-			->where('status = ?','approved')
-			->where('authorId = ?','0')
-			->where('type = ?','comment')
-			->where('created > ?',$expire)
+		$select = $db->select(array('COUNT(author)'=>'cnt'),'author','url','mail')->from('table.comments')
+			->where('status=?','approved')
+			->where('authorId=?','0')
+			->where('type=?','comment')
+			->where('created>?',$expire)
 			->limit($settings->listnumber)
 			->group('author')
 			->order('cnt',Typecho_Db::SORT_DESC);
@@ -190,13 +197,17 @@ class Avatars_Plugin implements Typecho_Plugin_Interface
 			//url未填写链接静默
 			$visurl = (!empty($count['url']))?$count['url']:'###';
 			$avhash = md5($count['mail']);
+
 			//同步系统头像评级
 			$avurl = 'http://gravatar.duoshuo.com/avatar/'.$avhash.'?s='.$settings->avsize.'&amp;r='.$options->commentsAvatarRating.'&amp;d='.$avdefault.'';
+
 			//调用缓存地址判断
 			$imgurl = ($settings->avcache=='true')?self::cache($avdefault,$avurl,$avhash):$avurl;
+
 			$mostactive .= 
 				'<'.$listtag.''.(empty($class)?'':' class="'.$class.'"').'>'.'<a href="'.$visurl.'"'.$nofollow.'title="'.$count['author'].' - '.$count['cnt'].$settings->altword.'"><img src="'.$imgurl.'" alt="'.$count['author'].' - '.$count['cnt'].$settings->altword.'" class="avatar" /></a></'.$listtag.'>';
 		}
+
 		echo $mostactive;
 	}
 
@@ -205,19 +216,21 @@ class Avatars_Plugin implements Typecho_Plugin_Interface
 	 * 
 	 * @access public
 	 * @param string $default 默认头像
-     * @param string $image 用户头像
-     * @param string $mailhash 邮箱哈希
+	 * @param string $image 用户头像
+	 * @param string $mailhash 邮箱哈希
 	 * @return string
 	 */
 	private static function cache($default,$image,$mailhash)
 	{
 		$options = Helper::options();
 		$settings = $options->plugin('Avatars');
+
 		//缓存目录绝对路径
 		$setdir = __TYPECHO_ROOT_DIR__.__TYPECHO_PLUGIN_DIR__.'/Avatars/cache/';
 		$defaultdir = $setdir.'default';
 		$sampledir = $setdir.'set';
 		$cachedir = $setdir.$mailhash;
+
 		//缓存默认时限15日
 		$cachetime = 14*24*3600;
 
@@ -225,9 +238,11 @@ class Avatars_Plugin implements Typecho_Plugin_Interface
 			copy($default,$defaultdir);
 		if (!is_file($sampledir))
 			copy('http://gravatar.duoshuo.com/avatar/?s='.$settings->avsize.'&amp;d=',$sampledir);
+
 		//不存在或过期则生成
 		if (!is_file($cachedir)||(time()-filemtime($cachedir))>$cachetime)
 			copy($image,$cachedir);
+
 		//自定义默认头像覆盖
 		if (filesize($cachedir)==filesize($sampledir))
 			copy($defaultdir,$cachedir);
