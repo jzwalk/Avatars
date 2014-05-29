@@ -236,10 +236,15 @@ class Avatars_Plugin implements Typecho_Plugin_Interface
 		$settings = $options->plugin('Avatars');
 
 		//缓存目录绝对路径
-		$setdir = __TYPECHO_ROOT_DIR__.__TYPECHO_PLUGIN_DIR__.'/Avatars/cache/';
-		$defaultdir = $setdir.'default'.$size;
-		$sampledir = $setdir.'set'.$size;
-		$cachedir = $setdir.$mailhash.$size;
+		$path = __TYPECHO_ROOT_DIR__.__TYPECHO_PLUGIN_DIR__.'/Avatars/cache/';
+		if (!is_dir($path)) {
+			if (!self::makedir($path)) {
+				return false;
+			}
+		}
+		$defaultdir = $path.'default'.$size;
+		$sampledir = $path.'set'.$size;
+		$cachedir = $path.$mailhash.$size;
 
 		//缓存默认时限15日
 		$cachetime = 14*24*3600;
@@ -277,6 +282,24 @@ class Avatars_Plugin implements Typecho_Plugin_Interface
 		Typecho_Widget::widget('Widget_Notice')->set(_t('本地头像缓存已清空!'),NULL,'success');
 
 		Typecho_Response::getInstance()->goBack();
+	}
+
+	/**
+	 * 本地目录创建
+	 *
+	 * @access private
+	 * @param string $path 路径
+	 * @return boolean
+	 */
+	private static function makedir($path)
+	{
+		if (!@mkdir($path,0777,true)) {
+			return false;
+		}
+		$stat = @stat($path);
+		$perms = $stat['mode']&0007777;
+		@chmod($path,$perms);
+		return true;
 	}
 
 }
