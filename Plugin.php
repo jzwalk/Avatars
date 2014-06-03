@@ -234,6 +234,8 @@ class Avatars_Plugin implements Typecho_Plugin_Interface
 	{
 		$options = Helper::options();
 		$settings = $options->plugin('Avatars');
+		if (!preg_match('/^http:\/\/([^"]+(?:jpg|gif|png|bmp|jpeg))/i',$default))
+		$default = 'http://gravatar.duoshuo.com/avatar/?s='.$size.'&amp;d=';
 
 		//缓存目录绝对路径
 		$path = __TYPECHO_ROOT_DIR__.__TYPECHO_PLUGIN_DIR__.'/Avatars/cache/';
