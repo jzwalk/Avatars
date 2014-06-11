@@ -6,7 +6,7 @@ if (!defined('__TYPECHO_ROOT_DIR__')) exit;
  * 
  * @package Avatars
  * @author 羽中
- * @version 1.2.2
+ * @version 1.2.3
  * @dependence 13.12.12-*
  * @link http://www.jzwalk.com/archives/net/avatars-for-typecho
  */
@@ -22,8 +22,8 @@ class Avatars_Plugin implements Typecho_Plugin_Interface
 	 */
 	public static function activate()
 	{
-		Typecho_Plugin::factory('Widget_Abstract_Contents')->contentEx = array('Avatars_Plugin','listwall');
-		Typecho_Plugin::factory('Widget_Abstract_Comments')->gravatar = array('Avatars_Plugin', 'avatars');
+		Typecho_Plugin::factory('Widget_Abstract_Contents')->contentEx = array('Avatars_Plugin','walls');
+		Typecho_Plugin::factory('Widget_Abstract_Comments')->gravatar = array('Avatars_Plugin','avatars');
 	}
 
 	/**
@@ -51,27 +51,27 @@ class Avatars_Plugin implements Typecho_Plugin_Interface
 		echo '<div style="color:#999;font-size:0.92857em;font-weight:bold;word-break:break-all;"><p>
 		'._t('在模版适当位置插入代码%s或在编辑器内写入<br/>%s发布均可显示读者墙. 橙色部分为自定义标签名(如span/div/p)和class名. ','<span style="color:#467B96;font-weight:bold">&lt;?php Avatars_Plugin::output("<span style="color:#E47E00;">li</span>","<span style="color:#E47E00;">mostactive</span>"); ?&gt;</span>','<span style="color:#467B96;font-weight:bold">[AVATARS|<span style="color:#E47E00;">li</span>|<span style="color:#E47E00;">mostactive</span>]</span>').'</p></div>';
 
-		$avcache = new Typecho_Widget_Helper_Form_Element_Radio('avcache',
-			array('false'=>_t('否'),'true'=>_t('是')),'false',_t('在本地缓存头像'),_t('评论区与读者墙头像均可缓存在cache目录下，每15天自动更新'));
-		$form->addInput($avcache);
+		$cache = new Typecho_Widget_Helper_Form_Element_Radio('cache',
+			array('false'=>_t('否'),'true'=>_t('是')),'false',_t('在本地缓存头像'),_t('评论区与读者墙头像均可缓存至插件目录'));
+		$form->addInput($cache);
 
 		$submit = new Typecho_Widget_Helper_Form_Element_Submit();
 		$submit->value(_t('清空缓存'));
 		$submit->setAttribute('style','position:relative;');
 		$submit->input->setAttribute('style','position:absolute;bottom:37px;left:110px;');
 		$submit->input->setAttribute('class','btn btn-s btn-warn btn-operate');
-		$submit->input->setAttribute('formaction',Typecho_Common::url('/admin/options-plugin.php?config=Avatars&action=deletefile',Helper::options()->siteUrl));
+		$submit->input->setAttribute('formaction',Typecho_Common::url('/options-plugin.php?config=Avatars&action=deletefile',Helper::options()->adminUrl));
 		$form->addItem($submit);
 
-		$avsize = new Typecho_Widget_Helper_Form_Element_Text('avsize',
+		$wsize = new Typecho_Widget_Helper_Form_Element_Text('wsize',
 			NULL,'32',_t('读者墙头像尺寸'),_t('设置读者墙显示的gravatar头像大小(*px*)'));
-		$avsize->input->setAttribute('class','w-10');
-		$form->addInput($avsize->addRule('isInteger',_t('请填入一个数字')));
+		$wsize->input->setAttribute('class','w-10');
+		$form->addInput($wsize->addRule('isInteger',_t('请填入一个数字')));
 
-		$avdefault = new Typecho_Widget_Helper_Form_Element_Text('avdefault',
-			NULL,'',_t('读者墙缺省头像'),_t('设置没有gravatar头像的读者显示图片url(注意与上一项尺寸一致)'));
-		$avdefault->input->setAttribute('style','width:550px;');
-		$form->addInput($avdefault->addRule('url',_t('请填入一个url地址')));
+		$wdefault = new Typecho_Widget_Helper_Form_Element_Text('wdefault',
+			NULL,'',_t('读者墙缺省头像'),_t('设置没有gravatar头像的读者显示图片url'));
+		$wdefault->input->setAttribute('style','width:550px;');
+		$form->addInput($wdefault);
 
 		$listnumber = new Typecho_Widget_Helper_Form_Element_Text('listnumber',
 			NULL,'10',_t('读者墙头像数目'),_t('设置最多显示多少个评论者头像'));
@@ -109,23 +109,17 @@ class Avatars_Plugin implements Typecho_Plugin_Interface
 	public function avatars($size,$rating,$default,$comments)
 	{
 		$settings = Helper::options()->plugin('Avatars');
-		$default = (!empty($default)) ? $default : 'http://gravatar.duoshuo.com/avatar/?s='.$size.'&amp;d=';
-
-		if (!empty($comments->mail)) {
-			$mailhash = md5(strtolower($comments->mail));
-		}
+		$mailhash = empty($comments->mail) ? '' : md5(strtolower($comments->mail));
 
 		//默认读取多说源
 		$url = 'http://gravatar.duoshuo.com/avatar/';
-		if (!empty($comments->mail)) {
-			$url .= $mailhash;
-		}
+		$url .= $mailhash;
 		$url .= '?s='.$size;
 		$url .= '&amp;r='.$rating;
 		$url .= '&amp;d='.$default;
 
 		//调用缓存地址判断
-		$imgurl = ($settings->avcache == 'true') ? self::cache($size,$default,$url,$mailhash) : $url;
+		$imgurl = ($settings->cache == 'true') ? self::cache($size,$default,$mailhash,$rating) : $url;
 		echo '<img class="avatar" src="'.$imgurl.'" alt="'.$comments->author.'"/>';
 	}
 
@@ -136,7 +130,7 @@ class Avatars_Plugin implements Typecho_Plugin_Interface
 	 * @param string $content
 	 * @return string
 	 */
-	public static function listwall($content,$widget,$lastResult)
+	public static function walls($content,$widget,$lastResult)
 	{
 		$content = empty($lastResult) ? $content : $lastResult;
 
@@ -181,15 +175,14 @@ class Avatars_Plugin implements Typecho_Plugin_Interface
 		$options = Helper::options();
 		$settings = $options->plugin('Avatars');
 		$mostactive = '';
-		$avsize = $settings->avsize;
+		$wsize = $settings->wsize;
+		$wdefault = $settings->wdefault;
 
-		//兼容缓存的默认头像
-		$avdefault = (!empty($settings->avdefault)) ? $settings->avdefault : 'http://gravatar.duoshuo.com/avatar/?s='.$avsize.'&amp;d=';
+		//同步系统设置
+		$wrate = $options->commentsAvatarRating;
+		$wnof = ($options->commentsUrlNofollow) ? 'rel="external nofollow"' : '';
 
-		//同步系统nofollow设置
-		$nofollow = ($options->commentsUrlNofollow) ? 'rel="external nofollow"' : '';
-
-		//收录时间计算
+		//计算收录时间
 		$expire = $options->gmtTime+$options->timezone-$settings->since*24*3600;
 
 		$db = Typecho_Db::get();
@@ -204,38 +197,39 @@ class Avatars_Plugin implements Typecho_Plugin_Interface
 		$counts = $db->fetchAll($select);
 
 		foreach ($counts as $count) {
-			//url未填写链接静默
-			$visurl = (!empty($count['url'])) ? $count['url'] : '###';
-			$avhash = md5($count['mail']);
+			//静默未填写url链接
+			$visurl = empty($count['url']) ? '###' : $count['url'];
+			$whash = md5($count['mail']);
 
-			//同步系统头像评级
-			$avurl = 'http://gravatar.duoshuo.com/avatar/'.$avhash.'?s='.$avsize.'&amp;r='.$options->commentsAvatarRating.'&amp;d='.$avdefault;
+			//获取多说源头像
+			$wurl = 'http://gravatar.duoshuo.com/avatar/'.$whash.'?s='.$wsize.'&amp;r='.$wrate.'&amp;d='.$wdefault;
 
 			//调用缓存地址判断
-			$imgurl = ($settings->avcache == 'true') ? self::cache($avsize,$avdefault,$avurl,$avhash) : $avurl;
+			$imgurl = ($settings->cache == 'true') ? self::cache($wsize,$wdefault,$whash,$wrate) : $wurl;
 
-			$mostactive .= '<'.$listtag.''.(empty($class) ? '' : ' class="'.$class.'"').'>'.'<a href="'.$visurl.'"'.$nofollow.'title="'.$count['author'].' - '.$count['cnt'].$settings->altword.'"><img src="'.$imgurl.'" alt="'.$count['author'].' - '.$count['cnt'].$settings->altword.'" class="avatar" /></a></'.$listtag.'>';
+			$mostactive .= '<'.$listtag.''.(empty($class) ? '' : ' class="'.$class.'"').'>'.'<a href="'.$visurl.'"'.$wnof.'title="'.$count['author'].' - '.$count['cnt'].$settings->altword.'"><img src="'.$imgurl.'" alt="'.$count['author'].' - '.$count['cnt'].$settings->altword.'" class="avatar" /></a></'.$listtag.'>';
 		}
 
 		echo $mostactive;
 	}
 
 	/**
-	 * 简易缓存生成
+	 * 缓存头像生成
 	 * 
 	 * @access public
 	 * @param integer $size 头像尺寸
 	 * @param string $default 默认头像
-	 * @param string $image 用户头像
-	 * @param string $mailhash 邮箱哈希
+	 * @param string $hash 邮箱哈希
 	 * @return string
 	 */
-	private static function cache($size,$default,$image,$mailhash)
+	private static function cache($size,$default,$hash,$rate)
 	{
 		$options = Helper::options();
 		$settings = $options->plugin('Avatars');
-		if (!preg_match('/^http:\/\/([^"]+(?:jpg|gif|png|bmp|jpeg))/i',$default))
-		$default = 'http://gravatar.duoshuo.com/avatar/?s='.$size.'&amp;d=';
+		$short = array('mm','identicon','monsterid','wavatar','retro','blank');
+		$code = in_array($default,$short) ? $default : '';
+		$default = preg_match('/^http:\/\/([^"]+(?:jpg|gif|png|bmp|jpeg))/i',$default) ? $default : 'http://gravatar.duoshuo.com/avatar/?d='.$code;
+		$avatar = 'http://gravatar.duoshuo.com/avatar/'.$hash.'?s='.$size.'&amp;r='.$rate;
 
 		//缓存目录绝对路径
 		$path = __TYPECHO_ROOT_DIR__.__TYPECHO_PLUGIN_DIR__.'/Avatars/cache/';
@@ -245,30 +239,31 @@ class Avatars_Plugin implements Typecho_Plugin_Interface
 			}
 		}
 		$defaultdir = $path.'default'.$size;
-		$sampledir = $path.'set'.$size;
-		$cachedir = $path.$mailhash.$size;
+		$sampledir = $path.'sample'.$size;
+		$cachedir = $path.$hash.$size;
 
 		//缓存默认时限15日
 		$cachetime = 14*24*3600;
 
-		if (!is_file($defaultdir))
-			copy($default,$defaultdir);
+		if (!is_file($defaultdir)) {
+			self::resizedefault($default,$size,$defaultdir);
+		}
 		if (!is_file($sampledir))
-			copy('http://gravatar.duoshuo.com/avatar/?s='.$settings->avsize.'&amp;d=',$sampledir);
+			copy('http://gravatar.duoshuo.com/avatar/?s='.$size,$sampledir);
 
 		//不存在或过期则生成
 		if (!is_file($cachedir) || (time()-filemtime($cachedir))>$cachetime)
-			copy($image,$cachedir);
+			copy($avatar,$cachedir);
 
-		//自定义默认头像覆盖
+		//自定义默认头像判断
 		if (filesize($cachedir) == filesize($sampledir))
-			copy($defaultdir,$cachedir);
+			$hash = 'default';
 
-		return $options->pluginUrl.'/Avatars/cache/'.$mailhash.$size;
+		return $options->pluginUrl.'/Avatars/cache/'.$hash.$size;
 	}
 
 	/**
-	 * 简易缓存清空
+	 * 缓存头像清空
 	 *
 	 * @access private
 	 * @return void
@@ -284,6 +279,56 @@ class Avatars_Plugin implements Typecho_Plugin_Interface
 		Typecho_Widget::widget('Widget_Notice')->set(_t('本地头像缓存已清空!'),NULL,'success');
 
 		Typecho_Response::getInstance()->goBack();
+	}
+
+	/**
+	 * 缩放默认头像
+	 *
+	 * @access public
+	 * @param string $default 默认头像
+	 * @param string $size 缩放尺寸
+	 * @param string $path 缓存路径
+	 * @return string
+	 */
+	private static function resizedefault($default,$size,$path)
+	{
+		list($imgwidth,$imgheight,$imgtype) = getimagesize($default);
+		$imgtype = image_type_to_mime_type($imgtype);
+
+		//采样
+		$sample = imagecreatetruecolor($size,$size);
+		switch ($imgtype) {
+			case "image/gif":
+				$source = imagecreatefromgif($default);
+				break;
+			case "image/pjpeg":
+			case "image/jpeg":
+			case "image/jpg":
+				$source = imagecreatefromjpeg($default);
+				break;
+			case "image/png":
+			case "image/x-png":
+				$source = imagecreatefrompng($default);
+				break;
+		}
+
+		//渲染
+		imagecopyresampled($sample,$source,0,0,0,0,$size,$size,$imgwidth,$imgheight);
+		switch ($imgtype) {
+			case "image/gif":
+				imagegif($sample,$path);
+				break;
+			case "image/pjpeg":
+			case "image/jpeg":
+			case "image/jpg":
+				imagejpeg($sample,$path,90);
+				break;
+			case "image/png":
+			case "image/x-png":
+				imagepng($sample,$path);
+				break;
+		}
+		chmod($path,0777);
 	}
 
 	/**
